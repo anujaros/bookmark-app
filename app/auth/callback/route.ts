@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   let next = searchParams.get('next') ?? '/'
   if (!next.startsWith('/')) {
     // if "next" is not a relative URL, use the default
-    next = '/'
+    next = '/dashboard'
   }
 
   if (code) {
@@ -17,15 +17,22 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       const forwardedHost = request.headers.get('x-forwarded-host') // original origin before load balancer
-      const isLocalEnv = process.env.NODE_ENV === 'development'
+      const isLocalEnv = process.env.NODE_ENV === 'development' || origin.includes('localhost')
+
+      let redirectUrl: string
       if (isLocalEnv) {
-        // we can be sure that there is no load balancer in between, so no need to watch for X-Forwarded-Host
-        return NextResponse.redirect(`${origin}${next}`)
+        redirectUrl = `${origin}${next}`
       } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`)
+        redirectUrl = `https://${forwardedHost}${next}`
       } else {
-        return NextResponse.redirect(`${origin}${next}`)
+        redirectUrl = `${origin}${next}`
       }
+
+      return NextResponse.redirect(redirectUrl)
+
+    } else {
+      console.error('Exchange code error:', error)
+      return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(error.message)}`)
     }
   }
 
